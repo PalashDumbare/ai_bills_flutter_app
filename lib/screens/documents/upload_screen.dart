@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +16,7 @@ class UploadScreen extends ConsumerStatefulWidget {
 
 class _UploadScreenState extends ConsumerState<UploadScreen> {
   File? _selectedFile;
+  Uint8List? _imageBytes;
   final _picker = ImagePicker();
 
   Future<void> _pickImage(ImageSource source) async {
@@ -26,8 +28,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     );
 
     if (image != null) {
+      final bytes = await image.readAsBytes();
       setState(() {
         _selectedFile = File(image.path);
+        _imageBytes = bytes;
       });
     }
   }
@@ -87,6 +91,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                           : () {
                               setState(() {
                                 _selectedFile = null;
+                                _imageBytes = null;
                               });
                               ref.read(uploadProvider.notifier).reset();
                             },
@@ -208,10 +213,16 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Image.file(
-            _selectedFile!,
-            fit: BoxFit.contain,
-          ),
+          if (_imageBytes != null)
+            Image.memory(
+              _imageBytes!,
+              fit: BoxFit.contain,
+            )
+          else if (!kIsWeb && _selectedFile != null)
+            Image.file(
+              _selectedFile!,
+              fit: BoxFit.contain,
+            ),
           if (uploadState.status != UploadStatus.idle &&
               uploadState.status != UploadStatus.done &&
               uploadState.status != UploadStatus.error)
