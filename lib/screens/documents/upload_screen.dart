@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart' as fp;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../config/theme.dart';
 import '../../providers/upload_provider.dart';
+
+enum PickedFileType { image, pdf }
 
 class UploadScreen extends ConsumerStatefulWidget {
   const UploadScreen({super.key});
@@ -16,7 +19,9 @@ class UploadScreen extends ConsumerStatefulWidget {
 
 class _UploadScreenState extends ConsumerState<UploadScreen> {
   File? _selectedFile;
-  Uint8List? _imageBytes;
+  Uint8List? _fileBytes;
+  PickedFileType? _fileType;
+  String? _fileName;
   final _picker = ImagePicker();
 
   Future<void> _pickImage(ImageSource source) async {
@@ -31,7 +36,27 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       final bytes = await image.readAsBytes();
       setState(() {
         _selectedFile = File(image.path);
-        _imageBytes = bytes;
+        _fileBytes = bytes;
+        _fileType = PickedFileType.image;
+        _fileName = image.name;
+      });
+    }
+  }
+
+  Future<void> _pickPdf() async {
+    final result = await fp.FilePicker.pickFiles(
+      type: fp.FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+
+    if (result.isNotEmpty) {
+      final file = result.first;
+      final bytes = await file.readAsBytes();
+      setState(() {
+        _selectedFile = File(file.path ?? '');
+        _fileBytes = bytes;
+        _fileType = PickedFileType.pdf;
+        _fileName = file.name;
       });
     }
   }
@@ -91,7 +116,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                           : () {
                               setState(() {
                                 _selectedFile = null;
-                                _imageBytes = null;
+                                _fileBytes = null;
+                                _fileType = null;
+                                _fileName = null;
                               });
                               ref.read(uploadProvider.notifier).reset();
                             },
@@ -152,6 +179,18 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _pickPdf,
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('Pick PDF'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
             ],
           ],
         ),
@@ -181,7 +220,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.add_a_photo_outlined,
+              Icons.file_upload_outlined,
               size: 64,
               color: AppColors.primary.withValues(alpha: 0.6),
             ),
@@ -195,7 +234,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Take a photo or select from gallery',
+              'Take a photo, select from gallery, or pick a PDF',
               style: TextStyle(
                 fontSize: 14,
                 color: AppColors.textSecondary,
@@ -213,9 +252,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (_imageBytes != null)
+          if (_fileType == PickedFileType.pdf)
+            _buildPdfPreview()
+          else if (_fileBytes != null)
             Image.memory(
-              _imageBytes!,
+              _fileBytes!,
               fit: BoxFit.contain,
             )
           else if (!kIsWeb && _selectedFile != null)
@@ -288,6 +329,41 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPdfPreview() {
+    return Container(
+      color: Colors.grey[100],
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.picture_as_pdf,
+              size: 80,
+              color: Colors.red[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _fileName ?? 'PDF Document',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'PDF file ready for processing',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
