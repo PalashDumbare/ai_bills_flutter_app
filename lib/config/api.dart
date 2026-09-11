@@ -11,5 +11,6 @@ class ApiConfig {
   static String extract(String id) => '/documents/$id/extract';
   static String structure(String id) => '/documents/$id/structure';
   static String index(String id) => '/documents/$id/index';
+  static String documentDetail(String id) => '/documents/$id';
   static const String chat = '/chat';
 }
