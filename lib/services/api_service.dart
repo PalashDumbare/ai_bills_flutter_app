@@ -81,6 +81,19 @@ class ApiService {
     return response.data;
   }
 
+  Future<List<dynamic>> fetchDocuments({String? userId}) async {
+    final response = await _dio.get(
+      ApiConfig.documents,
+      queryParameters: userId != null ? {'user_id': userId} : null,
+    );
+    return response.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> fetchDocumentDetail(String documentId) async {
+    final response = await _dio.get(ApiConfig.documentDetail(documentId));
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> chat({
     required String question,
     String? documentId,
