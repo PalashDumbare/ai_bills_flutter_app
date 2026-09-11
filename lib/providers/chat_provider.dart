@@ -32,7 +32,19 @@ class ChatNotifier extends Notifier<ChatState> {
       final api = ref.read(apiServiceProvider);
       final res = await api.chat(question: question, documentId: documentId);
       final answer = res['answer'] as String? ?? 'No answer';
-      final sources = (res['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final rawSources = (res['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      // Dedup sources by document_id:chunk_index + text hash (backend now does this, keep client safety)
+      final seenKeys = <String>{};
+      final seenText = <String>{};
+      final sources = <Map<String, dynamic>>[];
+      for (final s in rawSources) {
+        final key = '${s['document_id']}:${s['chunk_index']}';
+        final norm = (s['text']?.toString().split(RegExp(r'\s+')).take(30).join(' ').toLowerCase() ?? '');
+        if (seenKeys.contains(key) || seenText.contains(norm)) continue;
+        seenKeys.add(key);
+        seenText.add(norm);
+        sources.add(s);
+      }
       final botMsg = ChatMessage(text: answer, isUser: false, sources: sources);
       state = state.copyWith(messages: [...state.messages, botMsg], isLoading: false);
     } catch (e) {
