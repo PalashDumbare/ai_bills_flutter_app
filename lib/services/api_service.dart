@@ -50,7 +50,9 @@ class ApiService {
     final response = await _dio.post(
       ApiConfig.upload,
       data: formData,
-      onSendProgress: onProgress != null
+      // onSendProgress forces a CORS preflight on Web (XMLHttpRequest + upload
+      // listener) -> fails if server doesn't handle OPTIONS. Disable on Web.
+      onSendProgress: !kIsWeb && onProgress != null
           ? (sent, total) => onProgress(sent / total)
           : null,
     );
