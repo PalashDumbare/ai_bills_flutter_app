@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme.dart';
 import '../../providers/chat_provider.dart';
@@ -13,6 +14,12 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  int? _highlightedSourceGlobalIndex; // for highlight feedback
+
+  String _linkifyCitations(String text) {
+    // Convert [1] -> [1](source:1) so markdown makes it tappable, keep plain [1] visible anyway
+    return text.replaceAllMapped(RegExp(r'\[(\d+)\]'), (m) => '[${m[1]}](source:${m[1]})');
+  }
 
   @override
   void dispose() {
@@ -69,35 +76,100 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       itemCount: state.messages.length,
       itemBuilder: (context, i) {
         final m = state.messages[i];
+        final isUser = m.isUser;
+        // For bot messages, render Markdown with linked citations; for user plain text
+        final linkedText = isUser ? m.text : _linkifyCitations(m.text);
+
         return Align(
-          alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
             decoration: BoxDecoration(
-              color: m.isUser ? AppColors.primary : AppColors.surface,
+              color: isUser ? AppColors.primary : AppColors.surface,
               borderRadius: BorderRadius.circular(16),
-              border: m.isUser ? null : Border.all(color: AppColors.border),
+              border: isUser ? null : Border.all(color: AppColors.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(m.text, style: TextStyle(fontSize: 14, color: m.isUser ? Colors.white : AppColors.textPrimary)),
+                if (isUser)
+                  Text(m.text, style: const TextStyle(fontSize: 14, color: Colors.white))
+                else
+                  MarkdownBody(
+                    data: linkedText,
+                    selectable: true,
+                    onTapLink: (text, href, title) {
+                      if (href != null && href.startsWith('source:')) {
+                        final idx = int.tryParse(href.split(':').last);
+                        if (idx != null && idx > 0 && idx <= m.sources.length) {
+                          setState(() => _highlightedSourceGlobalIndex = i * 100 + idx);
+                          Future.delayed(const Duration(seconds: 2), () {
+                            if (mounted) setState(() => _highlightedSourceGlobalIndex = null);
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Source [$idx]'), duration: const Duration(milliseconds: 800)),
+                          );
+                        }
+                      }
+                    },
+                    styleSheet: MarkdownStyleSheet(
+                      p: const TextStyle(fontSize: 14, color: AppColors.textPrimary, height: 1.4),
+                      listBullet: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+                      strong: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      a: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, decoration: TextDecoration.underline),
+                      blockquoteDecoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(6),
+                        border: const Border(left: BorderSide(color: AppColors.primary, width: 3)),
+                      ),
+                      blockquotePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                    // extensionSet defaults to gitHubFlavored
+                  ),
                 if (m.sources.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 8),
                   const Text('Sources', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
                   const SizedBox(height: 6),
-                  ...m.sources.take(3).map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(8)),
-                          child: Text(s['text']?.toString().substring(0, (s['text']?.toString().length ?? 0).clamp(0, 120)) ?? '-', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  ...m.sources.take(3).toList().asMap().entries.map((entry) {
+                    final idx = entry.key + 1;
+                    final s = entry.value;
+                    final isHighlighted = _highlightedSourceGlobalIndex == i * 100 + idx;
+                    final txt = s['text']?.toString() ?? '-';
+                    final preview = txt.length > 140 ? '${txt.substring(0, 140)}…' : txt;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isHighlighted ? AppColors.primary.withValues(alpha: 0.08) : AppColors.background,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: isHighlighted ? AppColors.primary : Colors.transparent, width: isHighlighted ? 1.2 : 0),
                         ),
-                      )),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isHighlighted ? AppColors.primary : AppColors.primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text('[$idx]', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isHighlighted ? Colors.white : AppColors.primary)),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(preview, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
                 ],
               ],
             ),
