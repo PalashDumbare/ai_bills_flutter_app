@@ -35,7 +35,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     if (image != null) {
       final bytes = await image.readAsBytes();
       setState(() {
-        _selectedFile = File(image.path);
+        if (!kIsWeb) {
+          _selectedFile = File(image.path);
+        }
         _fileBytes = bytes;
         _fileType = PickedFileType.image;
         _fileName = image.name;
@@ -53,7 +55,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       final file = result.first;
       final bytes = await file.readAsBytes();
       setState(() {
-        _selectedFile = File(file.path ?? '');
+        if (!kIsWeb && file.path != null) {
+          _selectedFile = File(file.path!);
+        }
         _fileBytes = bytes;
         _fileType = PickedFileType.pdf;
         _fileName = file.name;
@@ -62,9 +66,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   }
 
   Future<void> _uploadAndProcess() async {
-    if (_selectedFile == null) return;
+    if (_fileBytes == null || _fileName == null) return;
 
-    await ref.read(uploadProvider.notifier).uploadAndProcess(_selectedFile!);
+    await ref.read(uploadProvider.notifier).uploadAndProcess(
+          fileName: _fileName!,
+          file: _selectedFile,
+          fileBytes: _fileBytes,
+        );
 
     if (!mounted) return;
 
@@ -101,12 +109,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: _selectedFile != null
+              child: _selectedFile != null || _fileBytes != null
                   ? _buildPreview(uploadState)
                   : _buildSourceSelector(),
             ),
             const SizedBox(height: 16),
-            if (_selectedFile != null) ...[
+            if (_selectedFile != null || _fileBytes != null) ...[
               Row(
                 children: [
                   Expanded(

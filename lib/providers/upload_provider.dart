@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/document.dart';
 import '../services/api_service.dart';
@@ -51,13 +52,19 @@ class UploadNotifier extends Notifier<UploadState> {
     return const UploadState();
   }
 
-  Future<void> uploadAndProcess(File file) async {
+  Future<void> uploadAndProcess({
+    required String fileName,
+    File? file,
+    Uint8List? fileBytes,
+  }) async {
     state = state.copyWith(status: UploadStatus.uploading, progress: 0, error: null);
 
     try {
       final uploadResult = await _api.uploadDocument(
-        file: file,
+        fileName: fileName,
         userId: _userId,
+        file: file,
+        fileBytes: fileBytes,
         onProgress: (progress) {
           state = state.copyWith(progress: progress);
         },

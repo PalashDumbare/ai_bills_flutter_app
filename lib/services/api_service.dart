@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../config/api.dart';
 
 class ApiService {
@@ -19,16 +20,30 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> uploadDocument({
-    required File file,
+    required String fileName,
     required String userId,
+    Uint8List? fileBytes,
+    File? file,
     void Function(double progress)? onProgress,
   }) async {
-    final fileName = file.path.split('/').last;
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
+    late MultipartFile multipartFile;
+
+    if (kIsWeb && fileBytes != null) {
+      multipartFile = MultipartFile.fromBytes(
+        fileBytes,
+        filename: fileName,
+      );
+    } else if (file != null) {
+      multipartFile = await MultipartFile.fromFile(
         file.path,
         filename: fileName,
-      ),
+      );
+    } else {
+      throw Exception('No file data provided');
+    }
+
+    final formData = FormData.fromMap({
+      'file': multipartFile,
       'user_id': userId,
     });
 
