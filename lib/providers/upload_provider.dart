@@ -60,6 +60,8 @@ class UploadNotifier extends Notifier<UploadState> {
     state = state.copyWith(status: UploadStatus.uploading, progress: 0, error: null);
 
     try {
+      // Single-call upload: backend now does extract→structure→index inline (backend/app/main.py:102)
+      // Old 4-call flow kept for backward compat but no longer needed.
       final uploadResult = await _api.uploadDocument(
         fileName: fileName,
         userId: _userId,
@@ -76,29 +78,31 @@ class UploadNotifier extends Notifier<UploadState> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      state = state.copyWith(
-        status: UploadStatus.extracting,
-        document: document,
-        progress: 1.0,
-      );
+      // Backend already processed (extracted + structured + indexed) during upload.
+      // Fetch structured data for UI, fallback to legacy flow if not yet ready.
+      state = state.copyWith(status: UploadStatus.structuring, document: document, progress: 1.0);
 
-      await _api.extractDocument(documentId);
+      dynamic structuredData;
+      try {
+        // Try fetching structured data (poll once, backend should be done)
+        final detail = await _api.fetchDocumentDetail(documentId);
+        structuredData = detail['structured_data'];
+        // If backend was still processing (e.g. large PDF), fallback to legacy explicit calls (idempotent)
+        if (detail['document_type'] == null) {
+          state = state.copyWith(status: UploadStatus.extracting);
+          await _api.extractDocument(documentId);
+          state = state.copyWith(status: UploadStatus.structuring);
+          final structureResult = await _api.structureDocument(documentId: documentId, userId: _userId);
+          structuredData = structureResult['structured_data'];
+          state = state.copyWith(status: UploadStatus.indexing, structuredData: structuredData);
+          await _api.indexDocument(documentId);
+        }
+      } catch (_) {
+        // Legacy fallback if fetch fails
+        structuredData = null;
+      }
 
-      state = state.copyWith(status: UploadStatus.structuring);
-
-      final structureResult = await _api.structureDocument(
-        documentId: documentId,
-        userId: _userId,
-      );
-
-      state = state.copyWith(
-        status: UploadStatus.indexing,
-        structuredData: structureResult['structured_data'],
-      );
-
-      await _api.indexDocument(documentId);
-
-      state = state.copyWith(status: UploadStatus.done);
+      state = state.copyWith(status: UploadStatus.done, structuredData: structuredData);
     } catch (e) {
       state = state.copyWith(
         status: UploadStatus.error,
