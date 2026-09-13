@@ -26,11 +26,13 @@ class ChatNotifier extends Notifier<ChatState> {
   Future<void> sendMessage(String question, {String? documentId}) async {
     if (question.trim().isEmpty) return;
     final userMsg = ChatMessage(text: question, isUser: true);
+    // Build history from existing messages (last 6) for multiturn — backend uses it for pronoun resolution
+    final history = state.messages.take(6).map((m) => {'role': m.isUser ? 'user' : 'assistant', 'content': m.text}).toList();
     state = state.copyWith(messages: [...state.messages, userMsg], isLoading: true, error: null);
 
     try {
       final api = ref.read(apiServiceProvider);
-      final res = await api.chat(question: question, documentId: documentId);
+      final res = await api.chat(question: question, documentId: documentId, history: history.isEmpty ? null : history);
       final answer = res['answer'] as String? ?? 'No answer';
       final rawSources = (res['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       // Dedup sources by document_id:chunk_index + text hash (backend now does this, keep client safety)
