@@ -97,12 +97,14 @@ class ApiService {
   Future<Map<String, dynamic>> chat({
     required String question,
     String? documentId,
+    List<Map<String, String>>? history,
   }) async {
     final response = await _dio.post(
       ApiConfig.chat,
       data: {
         'question': question,
         'document_id': documentId,
+        if (history != null && history.isNotEmpty) 'history': history,
       },
     );
     return response.data;
