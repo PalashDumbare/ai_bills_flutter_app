@@ -96,9 +96,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               children: [
                 if (isUser)
                   Text(m.text, style: const TextStyle(fontSize: 14, color: Colors.white))
-                else
+                else ...[
+                  if (m.text.contains('(from web search)'))
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: const Color(0xFF0EA5E9).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF0EA5E9).withValues(alpha: 0.3))),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.language, size: 14, color: Color(0xFF0EA5E9)), SizedBox(width: 6), Text('Answer from web search', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0EA5E9)))]),
+                    ),
                   MarkdownBody(
-                    data: linkedText,
+                    data: linkedText.replaceAll(' (from web search)', '').replaceAll('_(from web search)_', '').replaceAll('(from web search)', '').trim(),
                     selectable: true,
                     onTapLink: (text, href, title) {
                       if (href != null && href.startsWith('source:')) {
@@ -128,27 +135,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                     // extensionSet defaults to gitHubFlavored
                   ),
+                ],
                 if (m.sources.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 8),
-                  const Text('Sources', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+                  Row(
+                    children: [
+                      const Text('Sources', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+                      const SizedBox(width: 6),
+                      if (m.sources.any((s) => s['document_id'] == 'web'))
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: const Color(0xFF0EA5E9).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                          child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.language, size: 10, color: Color(0xFF0EA5E9)), SizedBox(width: 4), Text('Web search', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF0EA5E9)))]),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 6),
                   ...m.sources.take(3).toList().asMap().entries.map((entry) {
                     final idx = entry.key + 1;
                     final s = entry.value;
                     final isHighlighted = _highlightedSourceGlobalIndex == i * 100 + idx;
+                    final isWeb = s['document_id'] == 'web';
                     final txt = s['text']?.toString() ?? '-';
-                    final preview = txt.length > 140 ? '${txt.substring(0, 140)}…' : txt;
+                    // Extract URL for web sources: text ends with (https://...)
+                    final urlMatch = RegExp(r'\((https?://[^)]+)\)').firstMatch(txt);
+                    final url = urlMatch?.group(1);
+                    final cleanTxt = txt.replaceAll(RegExp(r'\s*\(https?://[^)]+\)\s*$'), '').trim();
+                    final preview = cleanTxt.length > 140 ? '${cleanTxt.substring(0, 140)}…' : cleanTxt;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: isHighlighted ? AppColors.primary.withValues(alpha: 0.08) : AppColors.background,
+                          color: isWeb ? const Color(0xFF0EA5E9).withValues(alpha: 0.06) : (isHighlighted ? AppColors.primary.withValues(alpha: 0.08) : AppColors.background),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: isHighlighted ? AppColors.primary : Colors.transparent, width: isHighlighted ? 1.2 : 0),
+                          border: Border.all(color: isWeb ? const Color(0xFF0EA5E9).withValues(alpha: 0.3) : (isHighlighted ? AppColors.primary : Colors.transparent), width: (isWeb || isHighlighted) ? 1.2 : 0),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,14 +180,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: isHighlighted ? AppColors.primary : AppColors.primary.withValues(alpha: 0.12),
+                                color: isWeb ? const Color(0xFF0EA5E9) : (isHighlighted ? AppColors.primary : AppColors.primary.withValues(alpha: 0.12)),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: Text('[$idx]', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isHighlighted ? Colors.white : AppColors.primary)),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                if (isWeb) const Icon(Icons.language, size: 10, color: Colors.white),
+                                if (isWeb) const SizedBox(width: 3),
+                                Text(isWeb ? 'Web [$idx]' : '[$idx]', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isWeb || isHighlighted ? Colors.white : AppColors.primary)),
+                              ]),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(preview, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3)),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(preview, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3)),
+                                if (isWeb && url != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(url, style: const TextStyle(fontSize: 10, color: Color(0xFF0EA5E9), decoration: TextDecoration.underline, height: 1.2)),
+                                ],
+                                if (isWeb)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 2),
+                                    child: Text('Verified from web search', style: TextStyle(fontSize: 9, color: Color(0xFF0EA5E9), fontStyle: FontStyle.italic)),
+                                  ),
+                              ]),
                             ),
                           ],
                         ),
